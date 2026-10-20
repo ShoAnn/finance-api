@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -10,33 +9,42 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ShoAnn/finance-api/internal/config"
+	apierr "github.com/ShoAnn/finance-api/internal/errors"
 )
 
 func main() {
-	if err := run(); err != nil {
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("invalid configuration", "error", err)
+		os.Exit(1)
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: cfg.LogLevel})))
+
+	if err := run(cfg); err != nil {
 		slog.Error("server exited", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	cfg := config.Load()
-
+func run(cfg config.Config) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	poolCfg, err := cfg.PoolConfig()
+	if err != nil {
+		return err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return fmt.Errorf("configure database pool: %w", err)
 	}
 	defer pool.Close()
 
-	pingCtx, cancelPing := context.WithTimeout(ctx, 5*time.Second)
+	pingCtx, cancelPing := context.WithTimeout(ctx, cfg.StartupTimeout)
 	defer cancelPing()
 	if err := pool.Ping(pingCtx); err != nil {
 		// Not fatal: /readyz reports the outage and the pool reconnects on its own.
@@ -45,30 +53,30 @@ func run() error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		apierr.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), cfg.ReadinessTimeout)
 		defer cancel()
 		if err := pool.Ping(ctx); err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable", "error": "database unreachable"})
+			apierr.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable", "error": "database unreachable"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+		apierr.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
 
 	srv := &http.Server{
-		Addr:              ":" + cfg.Port,
+		Addr:              fmt.Sprintf(":%d", cfg.Port),
 		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
+		ReadTimeout:       cfg.HTTP.ReadTimeout,
+		WriteTimeout:      cfg.HTTP.WriteTimeout,
+		IdleTimeout:       cfg.HTTP.IdleTimeout,
 	}
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("listening", "addr", srv.Addr)
+		slog.Info("listening", "addr", srv.Addr, "log_level", cfg.LogLevel.String())
 		errCh <- srv.ListenAndServe()
 	}()
 
@@ -82,18 +90,10 @@ func run() error {
 		slog.Info("shutdown signal received")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("graceful shutdown: %w", err)
 	}
 	return nil
-}
-
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(body); err != nil {
-		slog.Error("write response", "error", err)
-	}
 }
