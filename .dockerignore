@@ -1,0 +1,23 @@
+.git
+.gitignore
+.idea
+.vscode
+
+.env
+.env.*
+!.env.example
+
+# Not needed to compile the API binary.
+migrations
+
+# Local build artifacts and docs.
+bin
+dist
+coverage.out
+*.md
+
+Dockerfile
+.dockerignore
+compose.yaml
+compose.*.yaml
+sqlc.yaml

@@ -1,0 +1,66 @@
+name: finance-api
+
+x-postgres-env: &postgres-env
+  POSTGRES_USER: ${POSTGRES_USER:-finance}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finance}
+  POSTGRES_DB: ${POSTGRES_DB:-finance}
+
+x-database-url: &database-url "postgres://${POSTGRES_USER:-finance}:${POSTGRES_PASSWORD:-finance}@db:5432/${POSTGRES_DB:-finance}?sslmode=disable"
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment: *postgres-env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  # Applies migrations/ with golang-migrate, then exits. `api` waits for it to
+  # finish successfully. Re-running `up` against an already-migrated database
+  # is a no-op, so it is safe to start the stack repeatedly.
+  migrate:
+    image: migrate/migrate:v4.18.3
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations:ro
+    command:
+      - "-path=/migrations"
+      - "-database"
+      - *database-url
+      - "up"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PORT: "8080"
+      DATABASE_URL: *database-url
+    ports:
+      - "${API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  pgdata:

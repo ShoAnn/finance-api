@@ -1,0 +1,10 @@
+.env
+.env.local
+
+/bin/
+/api
+coverage.out
+
+.DS_Store
+.idea/
+.vscode/
