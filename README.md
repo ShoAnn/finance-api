@@ -38,12 +38,12 @@ instead of renumbering.
 
 ### Epic 1 — HTTP core
 
-- [ ] **FIN-10** Router skeleton: move health handlers into `handlers.go`, add `API.routes()` — `refactor` · `P0` · deps: —
+- [x] **FIN-10** Router skeleton: move health handlers into `handlers.go`, add `API.routes()` — `refactor` · 7001286
 - [ ] **FIN-11** Error-returning handler adapter: `func(w, r) error` wired to `WriteError` — `feat` · `P0` · deps: FIN-10
 - [ ] **FIN-12** Strict JSON decoder: reject malformed JSON, unknown fields, and trailing data as `invalid_request` — `feat` · `P0` · deps: —
 - [ ] **FIN-13** JSON `404` / `405` fallbacks to replace the mux's plain-text defaults — `feat` · `P1` · deps: FIN-10
 - [ ] **FIN-14** Request logging middleware: method, path, status, duration at `info` — `feat` · `P2` · deps: FIN-10
-- [ ] **FIN-15** Wire router into `main.go` with injected `Store`; keep startup/shutdown behavior unchanged — `refactor` · `P0` · deps: FIN-10
+- [x] **FIN-15** Wire router into `main.go` with injected `Store`; keep startup/shutdown behavior unchanged — `refactor` · 7001286
 - [ ] **FIN-16** Test harness: fake `sqlc.Querier` and response/assert helpers — `test` · `P0` · deps: FIN-11
 
 ### Epic 2 — Serialization and validation
