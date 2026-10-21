@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
         -trimpath \
         -ldflags="-s -w" \
         -o /out/api \
-        ./cmd/api
+        .
 
 # ---- runtime ----
 FROM alpine:3.22

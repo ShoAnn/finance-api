@@ -1,18 +1,48 @@
-// Package errors defines the API error types, the JSON error envelope, and
-// the translation of database failures into API errors.
-//
-// The package is named "errors" to match its directory, which collides with
-// the standard library package. Import it under an alias:
-//
-//	import apierr "github.com/ShoAnn/finance-api/internal/errors"
-package errors
+package main
 
 import (
+	"context"
 	"encoding/json"
 	stderrors "errors"
 	"log/slog"
 	"net/http"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
+
+// API holds the dependencies shared by the HTTP handlers.
+type API struct {
+	store            *Store
+	readinessTimeout time.Duration
+}
+
+// routes returns the HTTP handler with every route registered.
+func (a *API) routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", a.handleHealth)
+	mux.HandleFunc("GET /readyz", a.handleReady)
+	return mux
+}
+
+// handleHealth reports that the process is running. It does not check
+// dependencies.
+func (a *API) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleReady reports whether the API can serve traffic, which requires the
+// database to be reachable.
+func (a *API) handleReady(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), a.readinessTimeout)
+	defer cancel()
+	if err := a.store.Ping(ctx); err != nil {
+		WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable", "error": "database unreachable"})
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+}
 
 // Code is a stable, machine-readable error identifier.
 type Code string
@@ -165,5 +195,74 @@ func WriteJSON(w http.ResponseWriter, status int, body any) {
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(body); err != nil {
 		slog.Error("write response", "error", err)
+	}
+}
+
+// Postgres error codes handled explicitly.
+const (
+	pgUniqueViolation           = "23505"
+	pgForeignKeyViolation       = "23503"
+	pgCheckViolation            = "23514"
+	pgInvalidTextRepresentation = "22P02"
+)
+
+// uniqueMessages maps a unique constraint to a client-facing message.
+var uniqueMessages = map[string]string{
+	"categories_name_key": "category name already exists",
+}
+
+// checkDetails maps a check constraint to the field it constrains.
+var checkDetails = map[string]Detail{
+	"accounts_type_check": {
+		Field:   "type",
+		Message: "must be one of checking, savings, credit_card, cash, investment",
+	},
+	"categories_kind_check": {
+		Field:   "kind",
+		Message: "must be one of income, expense",
+	},
+}
+
+// FromDB translates a database error into an API error.
+//
+// Foreign key violations are reported as conflicts, which is correct when
+// deleting a resource that other records still reference. Handlers that insert
+// a row with a missing reference should report a 400 instead, for example:
+//
+//	if pgErr := FromDB(err); pgErr.Code == CodeConflict {
+//		return InvalidRequest("account does not exist")
+//	}
+func FromDB(err error) *APIError {
+	if err == nil {
+		return nil
+	}
+	if stderrors.Is(err, pgx.ErrNoRows) {
+		return NotFound("resource not found")
+	}
+
+	var pgErr *pgconn.PgError
+	if !stderrors.As(err, &pgErr) {
+		return Internal(err)
+	}
+
+	switch pgErr.Code {
+	case pgUniqueViolation:
+		message, ok := uniqueMessages[pgErr.ConstraintName]
+		if !ok {
+			message = "resource already exists"
+		}
+		return Conflict(message)
+	case pgCheckViolation:
+		detail, ok := checkDetails[pgErr.ConstraintName]
+		if !ok {
+			detail = Detail{Field: "value", Message: "violates a database constraint"}
+		}
+		return Validation(detail)
+	case pgInvalidTextRepresentation:
+		return InvalidRequest("malformed value")
+	case pgForeignKeyViolation:
+		return Conflict("resource is referenced by other records")
+	default:
+		return Internal(err)
 	}
 }

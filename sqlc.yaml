@@ -5,11 +5,11 @@ sql:
     # Add each new up migration here.
     schema:
       - "migrations/001_create_personal_finance_schema.up.sql"
-    queries: "internal/db/queries"
+    queries: "db/queries"
     gen:
       go:
         package: "sqlc"
-        out: "internal/db/sqlc"
+        out: "db/sqlc"
         sql_package: "pgx/v5"
         emit_json_tags: true
         emit_interface: true

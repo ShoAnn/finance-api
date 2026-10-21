@@ -20,7 +20,7 @@ info:
 
     Implementation status: `GET /healthz` and `GET /readyz` are implemented.
     The account, category, and transaction operations are **planned**, derived
-    from `migrations/` and `internal/db/queries/`. Operations carry an
+    from `migrations/` and `db/queries/`. Operations carry an
     `x-implementation-status` extension (`implemented` or `planned`) so clients
     and tooling can tell them apart.
 servers:

@@ -1,20 +1,23 @@
-// Package config loads and validates the API's runtime configuration from the
-// environment.
+// Package main runs the personal finance API.
 //
-// Every setting has a default that matches the local development setup, so the
-// API runs with no environment at all. Invalid values are reported together
-// rather than one at a time, so a misconfigured deployment can be fixed in a
-// single pass.
-package config
+// The whole service lives in this package: configuration in this file, the
+// HTTP handlers in handlers.go, and database access in store.go.
+package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Defaults for every setting.
@@ -179,6 +182,33 @@ func Load() (Config, error) {
 	return cfg, errors.Join(errs...)
 }
 
+// PoolConfig builds the pgx connection pool configuration from the database
+// settings. Settings left at zero keep the pgx default.
+func (c Config) PoolConfig() (*pgxpool.Config, error) {
+	poolCfg, err := pgxpool.ParseConfig(c.DatabaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("DATABASE_URL: %w", err)
+	}
+
+	if c.Database.MaxConns > 0 {
+		poolCfg.MaxConns = c.Database.MaxConns
+	}
+	if c.Database.MinConns > 0 {
+		poolCfg.MinConns = c.Database.MinConns
+	}
+	if c.Database.MaxConnLifetime > 0 {
+		poolCfg.MaxConnLifetime = c.Database.MaxConnLifetime
+	}
+	if c.Database.MaxConnIdleTime > 0 {
+		poolCfg.MaxConnIdleTime = c.Database.MaxConnIdleTime
+	}
+	if c.Database.HealthCheckPeriod > 0 {
+		poolCfg.HealthCheckPeriod = c.Database.HealthCheckPeriod
+	}
+
+	return poolCfg, nil
+}
+
 // durationSetting resolves a duration setting into dst and collects any
 // problem it finds.
 func durationSetting(errs []error, name string, def time.Duration, dst *time.Duration) []error {
@@ -235,4 +265,75 @@ func levelEnv(name string, def slog.Level) (slog.Level, error) {
 		return def, fmt.Errorf("%s: must be a log level such as info, got %q", name, raw)
 	}
 	return level, nil
+}
+
+func main() {
+	cfg, err := Load()
+	if err != nil {
+		slog.Error("invalid configuration", "error", err)
+		os.Exit(1)
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: cfg.LogLevel})))
+
+	if err := run(cfg); err != nil {
+		slog.Error("server exited", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run(cfg Config) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	poolCfg, err := cfg.PoolConfig()
+	if err != nil {
+		return err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		return fmt.Errorf("configure database pool: %w", err)
+	}
+	store := NewStore(pool)
+	defer store.Close()
+
+	pingCtx, cancelPing := context.WithTimeout(ctx, cfg.StartupTimeout)
+	defer cancelPing()
+	if err := store.Ping(pingCtx); err != nil {
+		// Not fatal: /readyz reports the outage and the pool reconnects on its own.
+		slog.Warn("database not reachable at startup", "error", err)
+	}
+
+	api := &API{store: store, readinessTimeout: cfg.ReadinessTimeout}
+
+	srv := &http.Server{
+		Addr:              fmt.Sprintf(":%d", cfg.Port),
+		Handler:           api.routes(),
+		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
+		ReadTimeout:       cfg.HTTP.ReadTimeout,
+		WriteTimeout:      cfg.HTTP.WriteTimeout,
+		IdleTimeout:       cfg.HTTP.IdleTimeout,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		slog.Info("listening", "addr", srv.Addr, "log_level", cfg.LogLevel.String())
+		errCh <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	case <-ctx.Done():
+		slog.Info("shutdown signal received")
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("graceful shutdown: %w", err)
+	}
+	return nil
 }
