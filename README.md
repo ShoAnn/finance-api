@@ -13,6 +13,92 @@ curl localhost:8080/healthz
 curl localhost:8080/readyz
 ```
 
+The stack starts Postgres, applies `migrations/`, then runs the API on
+[`localhost:8080`](http://localhost:8080).
+
+## API
+
+All request and response bodies are JSON. Errors use a consistent envelope:
+
+```json
+{"error": {"code": "not_found", "message": "account not found"}}
+```
+
+| Method   | Path                              | Description                              |
+| -------- | --------------------------------- | ---------------------------------------- |
+| `GET`    | `/healthz`                        | Liveness probe                           |
+| `GET`    | `/readyz`                         | Readiness probe (pings the database)     |
+| `GET`    | `/accounts`                       | List active accounts                     |
+| `POST`   | `/accounts`                       | Create an account                        |
+| `GET`    | `/accounts/{accountId}`           | Get an account, archived or not          |
+| `DELETE` | `/accounts/{accountId}`           | Delete an account                        |
+| `POST`   | `/accounts/{accountId}/archive`   | Archive an account                       |
+| `GET`    | `/accounts/{accountId}/balance`   | Sum of the account's transactions        |
+| `GET`    | `/categories`                     | List categories                          |
+| `POST`   | `/categories`                     | Create a category                        |
+| `PUT`    | `/categories/{categoryId}`        | Replace a category                       |
+| `DELETE` | `/categories/{categoryId}`        | Delete a category                        |
+| `GET`    | `/transactions`                   | List an account's transactions by date   |
+| `POST`   | `/transactions`                   | Create a transaction                     |
+| `GET`    | `/transactions/{transactionId}`   | Get a transaction                        |
+| `PUT`    | `/transactions/{transactionId}`   | Replace a transaction                    |
+| `DELETE` | `/transactions/{transactionId}`   | Delete a transaction                     |
+
+Amounts are integer cents. Positive transaction amounts are money in, negative
+amounts are money out.
+
+### Examples
+
+Create an account (currency defaults to `USD`):
+
+```sh
+curl -i -X POST localhost:8080/accounts \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Everyday Checking","type":"checking"}'
+```
+
+Create a category:
+
+```sh
+curl -i -X POST localhost:8080/categories \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Groceries","kind":"expense"}'
+```
+
+Create a transaction (`occurred_on` is `YYYY-MM-DD`):
+
+```sh
+curl -i -X POST localhost:8080/transactions \
+  -H 'Content-Type: application/json' \
+  -d '{"account_id":1,"category_id":1,"amount_cents":-4599,"description":"Weekly grocery run","occurred_on":"2026-01-20"}'
+```
+
+Read the balance and list transactions:
+
+```sh
+curl localhost:8080/accounts/1/balance
+curl 'localhost:8080/transactions?account_id=1&from=2026-01-01&to=2026-01-31'
+```
+
+Archive or delete:
+
+```sh
+curl -X POST localhost:8080/accounts/1/archive
+curl -X DELETE localhost:8080/transactions/1
+```
+
+## Development
+
+```sh
+make generate          # regenerate db/sqlc from db/queries
+make test              # unit tests
+make test-integration  # requires Postgres with migrations applied
+make smoke             # end-to-end test against a running stack
+```
+
+`test-integration` uses `TEST_DATABASE_URL`, defaulting to the compose
+database. The smoke test uses `BASE_URL`, defaulting to `http://localhost:8080`.
+
 ---
 
 ## Todo
@@ -28,26 +114,26 @@ Roughly in dependency order — work top to bottom.
 - [x] OpenAPI 3.1 contract
 - [x] Router skeleton and health handlers in `handlers.go`
 - [x] Store layer wrapping the generated queries
-- [ ] Error-returning handler adapter wired to `WriteError`
-- [ ] Strict JSON decoder: reject malformed JSON, unknown fields, and trailing data
-- [ ] JSON `404` / `405` fallbacks to replace the mux's plain-text defaults
-- [ ] Request logging middleware: method, path, status, duration
-- [ ] Test helpers: fake `sqlc.Querier` and response assertions
-- [ ] Shared validators: required, length, enums, ISO 4217 currency, dates, IDs
-- [ ] Validation error accumulator rendering `Validation` details
-- [ ] Account DTOs and endpoints: list, create, get, archive, balance, delete
-- [ ] Category DTOs and endpoints: list, create, update, delete
-- [ ] Transaction DTOs and endpoints: list, create, get, update, delete
-- [ ] Unit tests for DTO mapping and validation
-- [ ] Handler tests for accounts, categories, and transactions
-- [ ] Postgres integration harness and constraint error tests
-- [ ] CI: build, vet, `go test -race`, and `sqlc diff`
-- [ ] Compose smoke test: account → category → transactions → balance
-- [ ] Forward `HTTP_*_TIMEOUT` and `DB_*` settings through compose and `.env.example`
-- [ ] Makefile targets: `generate`, `migrate`, `test`, `run`
-- [ ] README usage docs: endpoints, request examples, error codes
-- [ ] Flip `x-implementation-status` to `implemented` and verify the spec
-- [ ] Final MVP pass: all of the above verified end to end
+- [x] Error-returning handler adapter wired to `WriteError`
+- [x] Strict JSON decoder: reject malformed JSON, unknown fields, and trailing data
+- [x] JSON `404` / `405` fallbacks to replace the mux's plain-text defaults
+- [x] Request logging middleware: method, path, status, duration
+- [x] Test helpers: fake `sqlc.Querier` and response assertions
+- [x] Shared validators: required, length, enums, ISO 4217 currency, dates, IDs
+- [x] Validation error accumulator rendering `Validation` details
+- [x] Account DTOs and endpoints: list, create, get, archive, balance, delete
+- [x] Category DTOs and endpoints: list, create, update, delete
+- [x] Transaction DTOs and endpoints: list, create, get, update, delete
+- [x] Unit tests for DTO mapping and validation
+- [x] Handler tests for accounts, categories, and transactions
+- [x] Postgres integration harness and constraint error tests
+- [x] CI: build, vet, `go test -race`, and `sqlc diff`
+- [x] Compose smoke test: account → category → transactions → balance
+- [x] Forward `HTTP_*_TIMEOUT` and `DB_*` settings through compose and `.env.example`
+- [x] Makefile targets: `generate`, `migrate`, `test`, `run`
+- [x] README usage docs: endpoints, request examples, error codes
+- [x] Flip `x-implementation-status` to `implemented` and verify the spec
+- [x] Final MVP pass: all of the above verified end to end
 
 ## Later (post-MVP)
 

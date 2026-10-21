@@ -17,6 +17,6 @@ UPDATE accounts
 SET archived_at = now()
 WHERE id = $1;
 
--- name: DeleteAccount :exec
+-- name: DeleteAccount :execrows
 DELETE FROM accounts
 WHERE id = $1;

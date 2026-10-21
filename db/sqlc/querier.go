@@ -13,9 +13,9 @@ type Querier interface {
 	CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error)
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (Category, error)
 	CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error)
-	DeleteAccount(ctx context.Context, id int64) error
-	DeleteCategory(ctx context.Context, id int64) error
-	DeleteTransaction(ctx context.Context, id int64) error
+	DeleteAccount(ctx context.Context, id int64) (int64, error)
+	DeleteCategory(ctx context.Context, id int64) (int64, error)
+	DeleteTransaction(ctx context.Context, id int64) (int64, error)
 	GetAccount(ctx context.Context, id int64) (Account, error)
 	GetAccountBalance(ctx context.Context, accountID int64) (int64, error)
 	GetTransaction(ctx context.Context, id int64) (Transaction, error)

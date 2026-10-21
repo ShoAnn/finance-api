@@ -14,6 +14,6 @@ SET name = $2,
 WHERE id = $1
 RETURNING *;
 
--- name: DeleteCategory :exec
+-- name: DeleteCategory :execrows
 DELETE FROM categories
 WHERE id = $1;

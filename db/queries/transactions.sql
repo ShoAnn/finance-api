@@ -1,7 +1,7 @@
 -- name: ListTransactions :many
 SELECT * FROM transactions
-WHERE account_id = $1
-  AND occurred_on BETWEEN $2 AND $3
+WHERE account_id = sqlc.arg(account_id)
+  AND occurred_on BETWEEN sqlc.arg(from_date) AND sqlc.arg(to_date)
 ORDER BY occurred_on DESC, id DESC;
 
 -- name: GetTransaction :one
@@ -24,7 +24,7 @@ SET account_id   = $2,
 WHERE id = $1
 RETURNING *;
 
--- name: DeleteTransaction :exec
+-- name: DeleteTransaction :execrows
 DELETE FROM transactions
 WHERE id = $1;
 

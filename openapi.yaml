@@ -18,11 +18,9 @@ info:
     - Request and response bodies are JSON unless noted otherwise.
     - Errors use a consistent envelope: `{"error": {"code": "...", "message": "..."}}`.
 
-    Implementation status: `GET /healthz` and `GET /readyz` are implemented.
-    The account, category, and transaction operations are **planned**, derived
-    from `migrations/` and `db/queries/`. Operations carry an
-    `x-implementation-status` extension (`implemented` or `planned`) so clients
-    and tooling can tell them apart.
+    All operations are implemented. Operations carry an
+    `x-implementation-status` extension so clients and tooling can confirm
+    support.
 servers:
   - url: http://localhost:8080
     description: Local development (see compose.yaml)
@@ -89,7 +87,7 @@ paths:
       operationId: listAccounts
       summary: List active accounts
       description: Returns non-archived accounts ordered by name.
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "200":
           description: Active accounts.
@@ -103,7 +101,7 @@ paths:
       tags: [Accounts]
       operationId: createAccount
       summary: Create an account
-      x-implementation-status: planned
+      x-implementation-status: implemented
       requestBody:
         required: true
         content:
@@ -134,7 +132,7 @@ paths:
       operationId: getAccount
       summary: Get an account
       description: Returns the account whether or not it is archived.
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "200":
           description: The account.
@@ -152,7 +150,7 @@ paths:
         Permanently deletes an account. Fails with `409` while any transaction
         still references it (`ON DELETE RESTRICT`); archive the account or move
         its transactions first.
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "204":
           description: Account deleted.
@@ -171,7 +169,7 @@ paths:
       description: |
         Marks the account as archived by setting `archived_at`, hiding it from
         `GET /accounts`. The account and its transactions are retained.
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "200":
           description: The archived account.
@@ -192,7 +190,7 @@ paths:
       description: |
         Sums `amount_cents` across the account's transactions. Accounts with no
         transactions return a balance of `0`.
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "200":
           description: Current balance.
@@ -209,7 +207,7 @@ paths:
       operationId: listCategories
       summary: List categories
       description: Returns all categories ordered by name.
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "200":
           description: Categories.
@@ -223,7 +221,7 @@ paths:
       tags: [Categories]
       operationId: createCategory
       summary: Create a category
-      x-implementation-status: planned
+      x-implementation-status: implemented
       requestBody:
         required: true
         content:
@@ -266,7 +264,7 @@ paths:
       description: |
         Replaces the category's name and kind. Transactions referencing the
         category keep their `category_id` and are unaffected.
-      x-implementation-status: planned
+      x-implementation-status: implemented
       requestBody:
         required: true
         content:
@@ -301,7 +299,7 @@ paths:
       description: |
         Deletes the category. Transactions that referenced it keep existing and
         have `category_id` set to `null` (`ON DELETE SET NULL`).
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "204":
           description: Category deleted.
@@ -317,7 +315,7 @@ paths:
         Returns transactions for one account where `occurred_on` is between
         `from` and `to` (inclusive), newest first. `from` must not be after
         `to`.
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - name: account_id
           in: query
@@ -358,7 +356,7 @@ paths:
       tags: [Transactions]
       operationId: createTransaction
       summary: Create a transaction
-      x-implementation-status: planned
+      x-implementation-status: implemented
       requestBody:
         required: true
         content:
@@ -388,7 +386,7 @@ paths:
       tags: [Transactions]
       operationId: getTransaction
       summary: Get a transaction
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "200":
           description: The transaction.
@@ -405,7 +403,7 @@ paths:
       description: |
         Replaces all mutable fields. Omitted optional fields are cleared, so send
         `null` explicitly if that is the intent.
-      x-implementation-status: planned
+      x-implementation-status: implemented
       requestBody:
         required: true
         content:
@@ -427,7 +425,7 @@ paths:
       tags: [Transactions]
       operationId: deleteTransaction
       summary: Delete a transaction
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "204":
           description: Transaction deleted.

@@ -47,14 +47,17 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 	return i, err
 }
 
-const deleteTransaction = `-- name: DeleteTransaction :exec
+const deleteTransaction = `-- name: DeleteTransaction :execrows
 DELETE FROM transactions
 WHERE id = $1
 `
 
-func (q *Queries) DeleteTransaction(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteTransaction, id)
-	return err
+func (q *Queries) DeleteTransaction(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteTransaction, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getAccountBalance = `-- name: GetAccountBalance :one
@@ -99,13 +102,13 @@ ORDER BY occurred_on DESC, id DESC
 `
 
 type ListTransactionsParams struct {
-	AccountID    int64       `json:"account_id"`
-	OccurredOn   pgtype.Date `json:"occurred_on"`
-	OccurredOn_2 pgtype.Date `json:"occurred_on_2"`
+	AccountID int64       `json:"account_id"`
+	FromDate  pgtype.Date `json:"from_date"`
+	ToDate    pgtype.Date `json:"to_date"`
 }
 
 func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsParams) ([]Transaction, error) {
-	rows, err := q.db.Query(ctx, listTransactions, arg.AccountID, arg.OccurredOn, arg.OccurredOn_2)
+	rows, err := q.db.Query(ctx, listTransactions, arg.AccountID, arg.FromDate, arg.ToDate)
 	if err != nil {
 		return nil, err
 	}

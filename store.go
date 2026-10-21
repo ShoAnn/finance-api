@@ -11,7 +11,7 @@ import (
 // Store is the data-access layer. It embeds the generated queries so handlers
 // can call them directly, and keeps the pool for health checks and shutdown.
 type Store struct {
-	*sqlc.Queries
+	sqlc.Querier
 
 	pool *pgxpool.Pool
 }
@@ -19,7 +19,7 @@ type Store struct {
 // NewStore returns a Store backed by pool.
 func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{
-		Queries: sqlc.New(pool),
+		Querier: sqlc.New(pool),
 		pool:    pool,
 	}
 }
