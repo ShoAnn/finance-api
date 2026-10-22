@@ -24,6 +24,9 @@ import (
 type API struct {
 	store            *Store
 	readinessTimeout time.Duration
+	// authenticate validates a presented API key. main wires it to the
+	// database-backed Store.authenticateAPIKey.
+	authenticate func(context.Context, string) error
 }
 
 // routes returns the HTTP handler with every route registered.
@@ -65,7 +68,7 @@ func (a *API) routes() http.Handler {
 	// Everything else is a JSON 404.
 	mux.HandleFunc("/", a.notFound)
 
-	return logRequests(mux)
+	return logRequests(a.requireAPIKey(mux))
 }
 
 // handle adapts a handler that returns an error to an http.HandlerFunc.
@@ -769,6 +772,8 @@ const (
 	CodeConflict Code = "conflict"
 	// CodeMethodNotAllowed reports a method the route does not support.
 	CodeMethodNotAllowed Code = "method_not_allowed"
+	// CodeUnauthorized reports a missing or invalid API key.
+	CodeUnauthorized Code = "unauthorized"
 	// CodeInternal reports an unexpected server-side failure.
 	CodeInternal Code = "internal_error"
 )
@@ -841,6 +846,15 @@ func NotFound(message string) *APIError {
 	return &APIError{
 		Status:  http.StatusNotFound,
 		Code:    CodeNotFound,
+		Message: message,
+	}
+}
+
+// Unauthorized reports a missing or invalid API key.
+func Unauthorized(message string) *APIError {
+	return &APIError{
+		Status:  http.StatusUnauthorized,
+		Code:    CodeUnauthorized,
 		Message: message,
 	}
 }

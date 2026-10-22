@@ -40,6 +40,23 @@ services:
       - *database-url
       - "up"
 
+  # One-off key generator. `docker compose run --rm apikey -name laptop`
+  # prints a new key once and exits; only its SHA-256 hash is stored.
+  apikey:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["tools"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: *database-url
+    entrypoint: ["/usr/local/bin/apikey"]
+
   api:
     build:
       context: .

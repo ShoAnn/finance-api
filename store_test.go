@@ -524,24 +524,31 @@ func TestFromDBNil(t *testing.T) {
 
 type fakeQuerier struct {
 	archiveAccount    func(context.Context, int64) error
+	createAPIKey      func(context.Context, sqlc.CreateAPIKeyParams) (sqlc.ApiKey, error)
 	createAccount     func(context.Context, sqlc.CreateAccountParams) (sqlc.Account, error)
 	createCategory    func(context.Context, sqlc.CreateCategoryParams) (sqlc.Category, error)
 	createTransaction func(context.Context, sqlc.CreateTransactionParams) (sqlc.Transaction, error)
 	deleteAccount     func(context.Context, int64) (int64, error)
 	deleteCategory    func(context.Context, int64) (int64, error)
 	deleteTransaction func(context.Context, int64) (int64, error)
+	getAPIKeyByHash   func(context.Context, string) (sqlc.ApiKey, error)
 	getAccount        func(context.Context, int64) (sqlc.Account, error)
 	getAccountBalance func(context.Context, int64) (int64, error)
 	getTransaction    func(context.Context, int64) (sqlc.Transaction, error)
 	listAccounts      func(context.Context) ([]sqlc.Account, error)
 	listCategories    func(context.Context) ([]sqlc.Category, error)
 	listTransactions  func(context.Context, sqlc.ListTransactionsParams) ([]sqlc.Transaction, error)
+	touchAPIKey       func(context.Context, int64) error
 	updateCategory    func(context.Context, sqlc.UpdateCategoryParams) (sqlc.Category, error)
 	updateTransaction func(context.Context, sqlc.UpdateTransactionParams) (sqlc.Transaction, error)
 }
 
 func (f *fakeQuerier) ArchiveAccount(ctx context.Context, id int64) error {
 	return f.archiveAccount(ctx, id)
+}
+
+func (f *fakeQuerier) CreateAPIKey(ctx context.Context, arg sqlc.CreateAPIKeyParams) (sqlc.ApiKey, error) {
+	return f.createAPIKey(ctx, arg)
 }
 
 func (f *fakeQuerier) CreateAccount(ctx context.Context, arg sqlc.CreateAccountParams) (sqlc.Account, error) {
@@ -572,6 +579,10 @@ func (f *fakeQuerier) GetAccount(ctx context.Context, id int64) (sqlc.Account, e
 	return f.getAccount(ctx, id)
 }
 
+func (f *fakeQuerier) GetAPIKeyByHash(ctx context.Context, keyHash string) (sqlc.ApiKey, error) {
+	return f.getAPIKeyByHash(ctx, keyHash)
+}
+
 func (f *fakeQuerier) GetAccountBalance(ctx context.Context, accountID int64) (int64, error) {
 	return f.getAccountBalance(ctx, accountID)
 }
@@ -594,6 +605,10 @@ func (f *fakeQuerier) ListTransactions(ctx context.Context, arg sqlc.ListTransac
 
 func (f *fakeQuerier) UpdateCategory(ctx context.Context, arg sqlc.UpdateCategoryParams) (sqlc.Category, error) {
 	return f.updateCategory(ctx, arg)
+}
+
+func (f *fakeQuerier) TouchAPIKey(ctx context.Context, id int64) error {
+	return f.touchAPIKey(ctx, id)
 }
 
 func (f *fakeQuerier) UpdateTransaction(ctx context.Context, arg sqlc.UpdateTransactionParams) (sqlc.Transaction, error) {
@@ -649,7 +664,15 @@ func sampleTransaction() sqlc.Transaction {
 }
 
 func newTestAPI(q sqlc.Querier) http.Handler {
-	return (&API{store: &Store{Querier: q}, readinessTimeout: time.Second}).routes()
+	return newTestAPIWithAuth(q, func(context.Context, string) error { return nil })
+}
+
+func newTestAPIWithAuth(q sqlc.Querier, authenticate func(context.Context, string) error) http.Handler {
+	return (&API{
+		store:            &Store{Querier: q},
+		readinessTimeout: time.Second,
+		authenticate:     authenticate,
+	}).routes()
 }
 
 func do(t *testing.T, h http.Handler, method, target, body string) *httptest.ResponseRecorder {
@@ -659,6 +682,7 @@ func do(t *testing.T, h http.Handler, method, target, body string) *httptest.Res
 		reader = strings.NewReader(body)
 	}
 	req := httptest.NewRequest(method, target, reader)
+	req.Header.Set("Authorization", "Bearer test-key")
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -728,6 +752,71 @@ func TestHealthRoute(t *testing.T) {
 	checkStatus(t, rec, http.StatusOK)
 	if got := rec.Header().Get("Content-Type"); got != "application/json" {
 		t.Errorf("Content-Type = %q", got)
+	}
+}
+
+// ---- authentication ----
+
+func TestAPIKeyRequired(t *testing.T) {
+	var seenToken string
+	fake := &fakeQuerier{
+		listAccounts: func(context.Context) ([]sqlc.Account, error) { return nil, nil },
+	}
+	api := newTestAPIWithAuth(fake, func(_ context.Context, token string) error {
+		seenToken = token
+		if token != "good-key" {
+			return Unauthorized("invalid API key")
+		}
+		return nil
+	})
+
+	serve := func(path, header string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		if header != "" {
+			req.Header.Set("Authorization", header)
+		}
+		rec := httptest.NewRecorder()
+		api.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// Health probes stay public.
+	checkStatus(t, serve("/healthz", ""), http.StatusOK)
+
+	rec := serve("/accounts", "")
+	checkError(t, rec, http.StatusUnauthorized, CodeUnauthorized)
+	if got := rec.Header().Get("WWW-Authenticate"); !strings.Contains(got, "Bearer") {
+		t.Errorf("WWW-Authenticate = %q, want a Bearer challenge", got)
+	}
+
+	checkError(t, serve("/accounts", "Basic good-key"), http.StatusUnauthorized, CodeUnauthorized)
+	checkError(t, serve("/accounts", "Bearer wrong-key"), http.StatusUnauthorized, CodeUnauthorized)
+
+	checkStatus(t, serve("/accounts", "Bearer good-key"), http.StatusOK)
+	if seenToken != "good-key" {
+		t.Errorf("authenticator saw token %q, want %q", seenToken, "good-key")
+	}
+}
+
+func TestBearerToken(t *testing.T) {
+	tests := []struct {
+		header string
+		want   string
+		ok     bool
+	}{
+		{"Bearer abc123", "abc123", true},
+		{"bearer abc123", "abc123", true},
+		{"Bearer\tabc123", "abc123", true},
+		{"Basic abc123", "", false},
+		{"Bearer", "", false},
+		{"Bearer   ", "", false},
+		{"", "", false},
+	}
+	for _, tt := range tests {
+		got, ok := bearerToken(tt.header)
+		if got != tt.want || ok != tt.ok {
+			t.Errorf("bearerToken(%q) = (%q, %t), want (%q, %t)", tt.header, got, ok, tt.want, tt.ok)
+		}
 	}
 }
 

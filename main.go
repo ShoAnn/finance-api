@@ -303,7 +303,11 @@ func run(cfg Config) error {
 		slog.Warn("database not reachable at startup", "error", err)
 	}
 
-	api := &API{store: store, readinessTimeout: cfg.ReadinessTimeout}
+	api := &API{
+		store:            store,
+		readinessTimeout: cfg.ReadinessTimeout,
+		authenticate:     store.authenticateAPIKey,
+	}
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),

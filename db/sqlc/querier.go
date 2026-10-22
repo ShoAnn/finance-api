@@ -10,18 +10,21 @@ import (
 
 type Querier interface {
 	ArchiveAccount(ctx context.Context, id int64) error
+	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
 	CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error)
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (Category, error)
 	CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error)
 	DeleteAccount(ctx context.Context, id int64) (int64, error)
 	DeleteCategory(ctx context.Context, id int64) (int64, error)
 	DeleteTransaction(ctx context.Context, id int64) (int64, error)
+	GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, error)
 	GetAccount(ctx context.Context, id int64) (Account, error)
 	GetAccountBalance(ctx context.Context, accountID int64) (int64, error)
 	GetTransaction(ctx context.Context, id int64) (Transaction, error)
 	ListAccounts(ctx context.Context) ([]Account, error)
 	ListCategories(ctx context.Context) ([]Category, error)
 	ListTransactions(ctx context.Context, arg ListTransactionsParams) ([]Transaction, error)
+	TouchAPIKey(ctx context.Context, id int64) error
 	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error)
 	UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) (Transaction, error)
 }

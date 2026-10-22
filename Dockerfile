@@ -19,6 +19,14 @@ RUN --mount=type=cache,target=/go/pkg/mod \
         -o /out/api \
         .
 
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build \
+        -trimpath \
+        -ldflags="-s -w" \
+        -o /out/apikey \
+        ./cmd/apikey
+
 # ---- runtime ----
 FROM alpine:3.22
 
@@ -27,6 +35,7 @@ RUN apk add --no-cache ca-certificates tzdata \
     && adduser -S -G app -H -s /sbin/nologin app
 
 COPY --from=build /out/api /usr/local/bin/api
+COPY --from=build /out/apikey /usr/local/bin/apikey
 
 USER app
 EXPOSE 8080

@@ -17,6 +17,15 @@ type Account struct {
 	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
 }
 
+type ApiKey struct {
+	ID         int64              `json:"id"`
+	Name       string             `json:"name"`
+	KeyHash    string             `json:"key_hash"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+}
+
 type Category struct {
 	ID        int64              `json:"id"`
 	Name      string             `json:"name"`

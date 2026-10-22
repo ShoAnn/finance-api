@@ -24,8 +24,9 @@ info:
 servers:
   - url: http://localhost:8080
     description: Local development (see compose.yaml)
-# No authentication is defined in this version of the API.
-security: []
+# Every operation except the health probes requires a bearer API key.
+security:
+  - BearerAuth: []
 tags:
   - name: Health
     description: Liveness and readiness probes.
@@ -42,6 +43,7 @@ paths:
       operationId: getHealth
       summary: Liveness probe
       description: Reports that the process is running. Does not check dependencies.
+      security: []
       x-implementation-status: implemented
       responses:
         "200":
@@ -61,6 +63,7 @@ paths:
       description: |
         Reports whether the API can serve traffic, including a database ping
         with a 2 second timeout.
+      security: []
       x-implementation-status: implemented
       responses:
         "200":
@@ -433,6 +436,15 @@ paths:
           $ref: "#/components/responses/NotFound"
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        API key created with the `apikey` command. Send it as
+        `Authorization: Bearer <key>`. Only the key's SHA-256 hash is stored
+        server-side.
+
   parameters:
     AccountId:
       name: accountId
@@ -466,6 +478,16 @@ components:
         example: 1234
 
   responses:
+    Unauthorized:
+      description: The API key is missing, invalid, or revoked.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: unauthorized
+              message: missing or invalid API key
     BadRequest:
       description: The request is malformed or fails validation.
       content:

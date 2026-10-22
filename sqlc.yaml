@@ -5,6 +5,7 @@ sql:
     # Add each new up migration here.
     schema:
       - "migrations/001_create_personal_finance_schema.up.sql"
+      - "migrations/002_create_api_keys.up.sql"
     queries: "db/queries"
     gen:
       go:

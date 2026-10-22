@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ShoAnn/finance-api/db/sqlc"
+	"github.com/ShoAnn/finance-api/internal/apikey"
 )
 
 // integrationStore connects to TEST_DATABASE_URL and empties the tables. Tests
@@ -133,5 +134,41 @@ func TestIntegrationConstraintMapping(t *testing.T) {
 	}
 	if _, err := store.DeleteAccount(ctx, account.ID); err != nil {
 		t.Fatalf("delete account: %v", err)
+	}
+}
+
+func TestIntegrationAPIKeyAuthentication(t *testing.T) {
+	store := integrationStore(t)
+	ctx := context.Background()
+
+	key, hash, err := apikey.Generate()
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	created, err := store.CreateAPIKey(ctx, sqlc.CreateAPIKeyParams{Name: "integration test", KeyHash: hash})
+	if err != nil {
+		t.Fatalf("create key: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := store.pool.Exec(context.Background(), "DELETE FROM api_keys WHERE id = $1", created.ID); err != nil {
+			t.Errorf("delete key: %v", err)
+		}
+	})
+
+	if err := store.authenticateAPIKey(ctx, key); err != nil {
+		t.Fatalf("authenticate valid key: %v", err)
+	}
+
+	err = store.authenticateAPIKey(ctx, "not-the-key")
+	if apiErr := As(err); apiErr.Code != CodeUnauthorized {
+		t.Errorf("invalid key error = %+v, want unauthorized", apiErr)
+	}
+
+	if _, err := store.pool.Exec(ctx, "UPDATE api_keys SET revoked_at = now() WHERE id = $1", created.ID); err != nil {
+		t.Fatalf("revoke key: %v", err)
+	}
+	err = store.authenticateAPIKey(ctx, key)
+	if apiErr := As(err); apiErr.Code != CodeUnauthorized {
+		t.Errorf("revoked key error = %+v, want unauthorized", apiErr)
 	}
 }
