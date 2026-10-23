@@ -365,7 +365,7 @@ func (a *API) createAccount(w http.ResponseWriter, r *http.Request) error {
 	name := strings.TrimSpace(req.Name)
 	v.minLength("name", name, 1)
 	v.oneOf("type", req.Type, accountTypes...)
-	currency := "USD"
+	currency := "IDR"
 	if req.Currency != nil {
 		currency = strings.ToUpper(strings.TrimSpace(*req.Currency))
 		v.currency(currency)

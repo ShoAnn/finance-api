@@ -73,7 +73,7 @@ header.
 KEY="<key printed by make key>"
 ```
 
-Create an account (currency defaults to `USD`):
+Create an account (currency defaults to `IDR`):
 
 ```sh
 curl -i -X POST localhost:8080/accounts \

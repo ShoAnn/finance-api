@@ -2,7 +2,7 @@ CREATE TABLE accounts (
     id          BIGSERIAL PRIMARY KEY,
     name        TEXT NOT NULL,
     type        TEXT NOT NULL CHECK (type IN ('checking', 'savings', 'credit_card', 'cash', 'investment')),
-    currency    CHAR(3) NOT NULL DEFAULT 'USD',
+    currency    CHAR(3) NOT NULL DEFAULT 'IDR',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     archived_at TIMESTAMPTZ
 );

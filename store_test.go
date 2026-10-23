@@ -873,11 +873,11 @@ func TestCreateAccount(t *testing.T) {
 	if got := rec.Header().Get("Location"); got != "/accounts/42" {
 		t.Errorf("Location = %q", got)
 	}
-	if got.Name != "Wallet" || got.Type != "cash" || got.Currency != "USD" {
+	if got.Name != "Wallet" || got.Type != "cash" || got.Currency != "IDR" {
 		t.Errorf("params = %+v", got)
 	}
 	body := decodeResponse[accountResponse](t, rec)
-	if body.ID != 42 || body.Currency != "USD" {
+	if body.ID != 42 || body.Currency != "IDR" {
 		t.Errorf("body = %+v", body)
 	}
 }

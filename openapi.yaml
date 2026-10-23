@@ -100,6 +100,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Account"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     post:
       tags: [Accounts]
       operationId: createAccount
@@ -126,6 +128,8 @@ paths:
                 $ref: "#/components/schemas/Account"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /accounts/{accountId}:
     parameters:
@@ -143,6 +147,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Account"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
@@ -157,6 +163,8 @@ paths:
       responses:
         "204":
           description: Account deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -180,6 +188,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Account"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -201,6 +211,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Balance"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -220,6 +232,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     post:
       tags: [Categories]
       operationId: createCategory
@@ -246,6 +260,8 @@ paths:
                 $ref: "#/components/schemas/Category"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "409":
           description: A category with the same name already exists.
           content:
@@ -283,6 +299,8 @@ paths:
                 $ref: "#/components/schemas/Category"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -306,6 +324,8 @@ paths:
       responses:
         "204":
           description: Category deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -355,6 +375,8 @@ paths:
                   $ref: "#/components/schemas/Transaction"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     post:
       tags: [Transactions]
       operationId: createTransaction
@@ -381,6 +403,8 @@ paths:
                 $ref: "#/components/schemas/Transaction"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /transactions/{transactionId}:
     parameters:
@@ -397,6 +421,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Transaction"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
     put:
@@ -422,6 +448,8 @@ paths:
                 $ref: "#/components/schemas/Transaction"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
@@ -432,6 +460,8 @@ paths:
       responses:
         "204":
           description: Transaction deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -440,10 +470,13 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
+      bearerFormat: API key
       description: |
-        API key created with the `apikey` command. Send it as
-        `Authorization: Bearer <key>`. Only the key's SHA-256 hash is stored
-        server-side.
+        One API key per client, created with the `apikey` command. Send it as
+        `Authorization: Bearer <key>`; the scheme is matched case-insensitively.
+        Only the key's SHA-256 hash is stored server-side, so a key cannot be
+        recovered after creation. Keys do not expire but are rejected once
+        `revoked_at` is set.
 
   parameters:
     AccountId:
@@ -479,7 +512,15 @@ components:
 
   responses:
     Unauthorized:
-      description: The API key is missing, invalid, or revoked.
+      description: |
+        The API key is missing, uses a scheme other than `Bearer`, or does not
+        match an active key. Revoked keys are rejected as well.
+      headers:
+        WWW-Authenticate:
+          description: Bearer challenge describing the expected scheme.
+          schema:
+            type: string
+          example: Bearer realm="finance-api"
       content:
         application/json:
           schema:
@@ -568,7 +609,7 @@ components:
           type: string
           description: ISO 4217 currency code.
           pattern: "^[A-Z]{3}$"
-          example: USD
+          example: IDR
         created_at:
           type: string
           format: date-time
@@ -591,10 +632,10 @@ components:
           $ref: "#/components/schemas/AccountType"
         currency:
           type: string
-          description: ISO 4217 currency code. Defaults to `USD`.
+          description: ISO 4217 currency code. Defaults to `IDR`.
           pattern: "^[A-Z]{3}$"
-          default: USD
-          example: USD
+          default: IDR
+          example: IDR
 
     Category:
       type: object
